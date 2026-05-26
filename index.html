@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登記簿 現在の所有者確認</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+    background: #F0F2F8;
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  h1 {
+    text-align: center;
+    color: #1B3A5C;
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .sub { text-align: center; color: #666; font-size: 13px; margin-bottom: 24px; }
+
+  #drop-zone {
+    border: 2.5px dashed #90A8C8;
+    border-radius: 12px;
+    background: #fff;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    max-width: 640px;
+    margin: 0 auto 24px;
+  }
+  #drop-zone.drag-over { background: #EAF4FF; border-color: #3B82F6; }
+  #drop-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  #drop-zone p { color: #555; font-size: 14px; }
+  #drop-zone input { display: none; }
+
+  #status {
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+    min-height: 20px;
+    margin-bottom: 16px;
+  }
+
+  #results { max-width: 640px; margin: 0 auto; }
+
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    border: 1.5px solid #C8D8E8;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .card-header {
+    background: #1B3A5C;
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .card-body { padding: 14px 16px; }
+
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .label {
+    font-size: 11px;
+    color: #888;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 3px;
+  }
+  .value {
+    font-size: 16px;
+    color: #1B3A5C;
+    font-weight: bold;
+    word-break: break-all;
+  }
+  .value.owner { font-size: 18px; color: #1B6B3A; }
+  .value.addr  { font-size: 14px; color: #444; font-weight: normal; }
+  .value.small { font-size: 13px; color: #555; font-weight: normal; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .badge-ok   { background: #D1FAE5; color: #065F46; }
+  .badge-warn { background: #FEF3C7; color: #92400E; }
+  .badge-risk { background: #FEE2E2; color: #991B1B; }
+
+  .owners-list { list-style: none; }
+  .owners-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #EEF0F5;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .owners-list li:last-child { border-bottom: none; }
+  .owner-num {
+    background: #1B3A5C;
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .owner-name { font-size: 16px; font-weight: bold; color: #1B6B3A; }
+  .owner-frac { font-size: 12px; color: #666; margin-top: 1px; }
+  .owner-addr { font-size: 12px; color: #555; margin-top: 1px; }
+
+  .spinner {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 3px solid #C8D8E8;
+    border-top-color: #1B3A5C;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    background: #FEE2E2;
+    border: 1px solid #F87171;
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #991B1B;
+    font-size: 14px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  footer {
+    text-align: center;
+    color: #AAA;
+    font-size: 11px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+
+<h1>📍 登記簿 現在の所有者確認</h1>
+<p class="sub">不動産登記簿PDFをドロップするだけで所有者を確認できます</p>
+
+<div id="drop-zone">
+  <div class="icon">📄</div>
+  <p>登記簿PDFをここにドラッグ＆ドロップ</p>
+  <p style="margin-top:6px; font-size:12px; color:#999;">または クリックして選択</p>
+  <input type="file" id="file-input" accept=".pdf">
+</div>
+
+<div id="status"></div>
+<div id="results"></div>
+
+<footer>釜慶鉄工 土地プロジェクト用ツール ｜ ブラウザ内で処理（PDFはサーバーに送信されません）</footer>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── ドラッグ＆ドロップ ────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+// ── メイン処理 ────────────────────────────────────────
+async function handleFile(file) {
+  const status  = document.getElementById('status');
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+  status.innerHTML  = '<span class="spinner"></span> 解析中...';
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page  = await pdf.getPage(i);
+      const tc    = await page.getTextContent();
+      fullText   += tc.items.map(it => it.str).join('') + '\n';
+    }
+
+    const parsed = parseTouki(fullText);
+    renderResult(parsed, file.name);
+    status.innerHTML = '✅ 解析完了';
+  } catch (err) {
+    status.innerHTML = '';
+    results.innerHTML = `<div class="error-box">⚠️ エラー: ${err.message}</div>`;
+    console.error(err);
+  }
+}
+
+// ── テキスト正規化 ────────────────────────────────────
+function zen2han(s) {
+  return s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+          .replace(/[Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
+// ── パース ────────────────────────────────────────────
+function parseTouki(rawText) {
+  const t = zen2han(rawText);
+
+  // ── 表題部 ──
+  const fudosanNo = (t.match(/不動産番号\s*[│┃]?\s*([0-9]{13})/) || [])[1] || '';
+
+  // 所在
+  const zaim = (t.match(/所\s*在\s*[│┃]\s*([^\n│┃]{3,40})/) || [])[1]?.trim() || '';
+
+  // 地番・家屋番号
+  const chibanM = t.match(/([0-9]+番[0-9]*(?:の[0-9]+)?)\s*[│┃]/)
+               || t.match(/家屋番号\s*[│┃]\s*([^\n│┃]{2,20})/);
+  const chiban = chibanM ? chibanM[1].trim() : '';
+
+  // 地目・種類
+  const chimoku = (t.match(/\s(畑|田|宅地|山林|雑種地|原野|池沼|公衆用道路|墓地|境内地|用悪水路)\s/) || [])[1] || '';
+
+  // 種別判定
+  const docType = t.includes('家屋番号') ? '建物' : '土地';
+
+  // ── 甲区テキスト取得 ──
+  const koukuM = t.match(/甲\s*区[\s\S]*?(?=乙\s*区|$)/);
+  const kouku  = koukuM ? koukuM[0] : t;
+
+  // ── 所有者抽出 ──
+  const owners = extractOwners(kouku);
+
+  // ── 乙区（抵当権チェック） ──
+  const otsukuM = t.match(/乙\s*区[\s\S]*/);
+  const riskInfo = checkRisk(otsukuM ? otsukuM[0] : '');
+
+  return { fudosanNo, zaim, chiban, chimoku, docType, owners, riskInfo };
+}
+
+// ── 所有者抽出ロジック ─────────────────────────────────
+function extractOwners(kouku) {
+  const lines = kouku.split('\n');
+  const SEP   = '；';
+
+  // 最後の所有権移転・保存ブロックを探す
+  const OWNERSHIP_RE = /所有権(?:移転|保存|登記)|共有者全員持分全部移転|合併による所有権|換地処分|仮登記に基づく本登記/;
+  const SKIP_RE      = /移記|規定|附則|令第|の登記を|により移記|法務省令|下線|相続人申告/;
+
+  let lastOwnerBlock = -1;
+  const rankPos = [];
+  lines.forEach((ln, i) => {
+    if (/┃\s*\d+\s*[│┤]/.test(ln) && !/付記/.test(ln)) rankPos.push(i);
+  });
+
+  for (let k = rankPos.length - 1; k >= 0; k--) {
+    const start = rankPos[k];
+    const end   = k + 1 < rankPos.length ? rankPos[k + 1] : lines.length;
+    const block = lines.slice(start, end).join('\n');
+    if (OWNERSHIP_RE.test(block) && !/(差押|仮差押|抵当権)/.test(lines[start])) {
+      lastOwnerBlock = k;
+      break;
+    }
+  }
+  if (lastOwnerBlock === -1) return [];
+
+  const start  = rankPos[lastOwnerBlock];
+  const end    = lastOwnerBlock + 1 < rankPos.length ? rankPos[lastOwnerBlock + 1] : lines.length;
+  const blines = lines.slice(start, end);
+
+  const owners = [];
+  const hasKyoyu = blines.some(ln => /共有者/.test(ln));
+
+  if (hasKyoyu) {
+    // 共有者モード
+    let curAddr = '', curFrac = '';
+    for (const ln of blines) {
+      const cells = ln.split(/[│┃]/);
+      const cell  = [...cells].reverse().find(c => c.trim()) || '';
+      const clean = cell.replace(/\s+/g, '');
+      if (!clean || SKIP_RE.test(clean)) continue;
+
+      if (/共有者/.test(clean)) {
+        const addrPart = clean.replace(/共有者\s*/, '');
+        if (/番地/.test(addrPart)) curAddr = addrPart;
+        curFrac = '';
+        continue;
+      }
+      if (/番地/.test(clean)) { curAddr = clean; curFrac = ''; continue; }
+      const fracM = clean.match(/([0-9]+分の[0-9]+)/);
+      if (fracM) { curFrac = fracM[1]; continue; }
+      if (/[一-鿿]/.test(clean) && !/[0-9]/.test(clean)
+          && !/番地|丁目|登記|移転|移記|相続|売買|贈与|原因/.test(clean)) {
+        owners.push({ name: clean, frac: curFrac, addr: curAddr });
+        curFrac = '';
+      }
+    }
+  } else {
+    // 単独所有者モード
+    for (let i = 0; i < blines.length; i++) {
+      const ln = blines[i];
+      if (!/所有者|受託者/.test(ln)) continue;
+      const am = ln.match(/(?:所有者|受託者)\s+([^│┃\n]+?)(?:\s*[│┃]|$)/);
+      if (!am) continue;
+      let addr = am[1].trim();
+      const fracM = ln.match(/持分([0-9]+分の[0-9]+)/);
+      const frac  = fracM ? fracM[1] : '';
+
+      // 次の行から名前を探す
+      let name = '';
+      for (const offset of [1, 2]) {
+        if (i + offset < blines.length) {
+          const cells = blines[i + offset].split(/[│┃]/);
+          name = extractName(cells);
+          if (name) break;
+        }
+      }
+      // フォールバック：同行の値が名前の場合（例：浜松市）
+      if (!name && addr) {
+        const ac = addr.replace(/\s+/g, '');
+        if (/[一-鿿]/.test(ac) && !/[0-9]/.test(ac) && !/番地|丁目/.test(ac)) {
+          name = ac; addr = '';
+        }
+      }
+      owners.push({ name, frac, addr });
+    }
+  }
+  return owners;
+}
+
+function extractName(cells) {
+  const SKIP = /移記|規定|附則|令第|登記の目的|受付年月日|権利者その他|順位\d|付記|下線|の登記を|により移記|法務省令/;
+  for (const cell of [...cells].reverse()) {
+    const s = cell.replace(/\s+/g, '').trim();
+    if (!s) continue;
+    if (!/[一-鿿぀-ヿ]/.test(s)) continue;
+    if (SKIP.test(s)) continue;
+    if (/番地/.test(s)) continue;
+    if (/^[、・。,．]/.test(s)) continue;
+    return s;
+  }
+  return '';
+}
+
+// ── 乙区リスクチェック ────────────────────────────────
+function checkRisk(otsuku) {
+  if (!otsuku) return { level: 'clear', text: '乙区なし（担保なし）' };
+  const active   = /抵当権設定|根抵当権設定/.test(otsuku) && !/抹消/.test(otsuku.slice(0, 200));
+  const sashiosae = /差押|仮差押/.test(otsuku);
+  if (sashiosae) return { level: 'risk',  text: '差押・仮差押あり（要精査）' };
+  if (active)    return { level: 'warn',  text: '抵当権あり（要確認）' };
+  return           { level: 'clear', text: '抵当権抹消済み（権利クリア）' };
+}
+
+// ── 結果表示 ──────────────────────────────────────────
+function renderResult(p, filename) {
+  const results = document.getElementById('results');
+
+  const riskBadge = p.riskInfo.level === 'clear'
+    ? `<span class="badge badge-ok">✓ ${p.riskInfo.text}</span>`
+    : p.riskInfo.level === 'warn'
+    ? `<span class="badge badge-warn">⚠ ${p.riskInfo.text}</span>`
+    : `<span class="badge badge-risk">✗ ${p.riskInfo.text}</span>`;
+
+  const ownersHtml = p.owners.length === 0
+    ? '<p style="color:#999;font-size:13px;">所有者が取得できませんでした</p>'
+    : `<ul class="owners-list">${p.owners.map((o, i) => `
+      <li>
+        <span class="owner-num">${i + 1}</span>
+        <div>
+          <div class="owner-name">${o.name || '（不明）'}</div>
+          ${o.frac ? `<div class="owner-frac">持分 ${o.frac}</div>` : ''}
+          ${o.addr ? `<div class="owner-addr">📍 ${o.addr}</div>` : ''}
+        </div>
+      </li>`).join('')}</ul>`;
+
+  results.innerHTML = `
+    <div class="card">
+      <div class="card-header">📌 物件情報</div>
+      <div class="card-body">
+        <div class="field">
+          <div class="label">種別</div>
+          <div class="value small">${p.docType}</div>
+        </div>
+        ${p.zaim ? `<div class="field"><div class="label">所在</div><div class="value small">${p.zaim}</div></div>` : ''}
+        ${p.chiban ? `<div class="field"><div class="label">地番・家屋番号</div><div class="value small">${p.chiban}</div></div>` : ''}
+        ${p.chimoku ? `<div class="field"><div class="label">地目</div><div class="value small">${p.chimoku}</div></div>` : ''}
+        ${p.fudosanNo ? `<div class="field"><div class="label">不動産番号</div><div class="value small">${p.fudosanNo}</div></div>` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">👤 現在の所有者 ${riskBadge}</div>
+      <div class="card-body">${ownersHtml}</div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
